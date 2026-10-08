@@ -10,6 +10,7 @@
   </head>
   <body>
     <main id="cabinet" class="game-shell" aria-label="Space Attack arcade">
+      <div class="game-stage">
       <h1 class="sr-only">Space Attack</h1>
       <p class="sr-only" id="instructions">Left and right arrows to move. Hold space to fire. Enter to start or restart. Escape to pause. M to toggle sound.</p>
       <div id="game-canvas" role="img" aria-label="Space Attack playfield" aria-describedby="instructions" tabindex="0"></div>
@@ -22,6 +23,7 @@
       <button class="game-action" id="fullscreen-button" aria-label="Enter fullscreen" title="Fullscreen"><span class="sr-only">Fullscreen</span></button>
       <p class="sr-only" id="game-announcement" role="status" aria-live="polite"></p>
       <div id="error-screen" hidden><h2>GAME UNAVAILABLE</h2><p>Enable WebGL and reload to try again.</p><button onclick="location.reload()">RELOAD</button></div>
+      </div>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

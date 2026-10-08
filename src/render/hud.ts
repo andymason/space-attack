@@ -92,6 +92,16 @@ export class GameHud extends Container {
     this.buttonLabel.y = rect.y + 13;
   }
 
+  setResolution(resolution: number) {
+    const updateText = (container: Container) => {
+      for (const child of container.children) {
+        if (child instanceof Text) child.resolution = Math.max(1, resolution);
+        else if (child instanceof Container) updateText(child);
+      }
+    };
+    updateText(this);
+  }
+
   draw(game: GameModel, view: HudView) {
     const demo = view.screen === 'start';
     this.score.text = scoreText(demo ? 0 : game.score);

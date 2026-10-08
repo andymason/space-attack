@@ -29,11 +29,13 @@ export class GameRenderer {
   private stars = Array.from({ length: 90 }, (_, i) => ({ x: (i * 173.7 + 31) % C.width, y: (i * 87.3 + 17) % C.height, speed: 7 + (i % 4) * 5, alpha: 0.17 + (i % 5) * 0.09, size: i % 9 === 0 ? 2 : 1 }));
   private shake = 0;
   private visualTime = 0;
+  private mount: HTMLElement | null = null;
+  private pixelRatio = 0;
   effects = true;
   reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   async init(mount: HTMLElement) {
-    await this.app.init({ width: C.width, height: C.height, background: '#03070c', preference: 'webgl', antialias: false, resolution: 1, autoStart: false });
+    await this.app.init({ width: C.width, height: C.height, background: '#03070c', preference: 'webgl', antialias: false, roundPixels: true, resolution: 1, autoStart: false });
     mount.append(this.app.canvas);
     this.app.stage.addChild(this.world);
     this.world.addChild(this.starGraphics, this.entities, this.missileGraphics, this.particleGraphics);
@@ -43,9 +45,31 @@ export class GameRenderer {
     this.entities.addChild(this.flame, this.player);
     this.hud = new GameHud(this.textures);
     this.app.stage.addChild(this.hud);
+    // Filters must preserve the native-resolution scene instead of reducing it to 640×480.
+    this.bloom.resolution = 'inherit';
+    this.crt.resolution = 'inherit';
     this.world.filterArea = new Rectangle(0, 0, C.width, C.height);
     this.setEffects(this.effects);
+    this.mount = mount;
+    this.resizeToDisplay();
+    new ResizeObserver(() => this.resizeToDisplay()).observe(mount);
+    window.addEventListener('resize', () => this.resizeToDisplay());
+    document.addEventListener('fullscreenchange', () => this.resizeToDisplay());
     matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', event => { this.reducedMotion = event.matches; });
+  }
+
+  private resizeToDisplay() {
+    if (!this.mount) return;
+    const width = this.mount.getBoundingClientRect().width;
+    if (width <= 0) return;
+    this.pixelRatio = window.devicePixelRatio || 1;
+    // The simulation stays 640×480; only the backing buffer grows to match physical pixels.
+    const resolution = width * this.pixelRatio / C.width;
+    if (Math.abs(this.app.renderer.resolution - resolution) < 0.0001) return;
+    this.app.renderer.resize(C.width, C.height, resolution);
+    this.bloom.pixelSize = { x: resolution, y: resolution };
+    this.hud.setResolution(resolution);
+    for (const popup of this.popups) popup.label.resolution = Math.max(1, resolution);
   }
 
   setEffects(enabled: boolean) {
@@ -88,12 +112,13 @@ export class GameRenderer {
   }
 
   private popup(text: string, x: number, y: number, color: number) {
-    const label = new Text({ text, style: { fontFamily: 'Press Start 2P', fontSize: 8, fill: color } });
+    const label = new Text({ text, style: { fontFamily: 'Press Start 2P', fontSize: 8, fill: color }, resolution: Math.max(1, this.app.renderer.resolution) });
     label.anchor.set(0.5); label.position.set(x, y);
     this.world.addChild(label); this.popups.push({ label, life: 0.8 });
   }
 
   draw(game: GameModel, dt: number, view: HudView) {
+    if (this.pixelRatio !== window.devicePixelRatio) this.resizeToDisplay();
     if (game.phase === 'intermission' && this.previousPhase !== 'intermission') this.clear();
     this.previousPhase = game.phase;
     this.visualTime += dt;

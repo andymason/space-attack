@@ -2,6 +2,8 @@
 
 A keyboard arcade game built with TypeScript, Vite and PixiJS. The entire visible interface, including scores, fuel, ships and screen controls, is rendered in the game canvas.
 
+![Space Attack gameplay screenshot](public/space-attak-screenshot.png)
+
 ## Run locally
 
 ```sh

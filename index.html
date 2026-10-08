@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#080c10" />
+    <meta name="description" content="A glowing tribute to Space Attack. Dodge diving aliens, watch your fuel, and chase your high score in this free retro arcade game." />
+    <title>Space Attack — Back to the Arcade</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="masthead">
+        <a class="brand" href="/" aria-label="Space Attack home">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2h4v4h4v4h4v10h-6v-4H8v4H2V10h4V6h4zM6 10v4h4v-4zm8 0v4h4v-4z" fill="currentColor"/></svg>
+          <span>SPACE ATTACK<span class="brand-sub">THE ARCADE, REIGNITED.</span></span>
+        </a>
+        <div class="edition"><span class="live-dot"></span> EST. 1982 <span class="edition-slash">/</span> REIMAGINED 2026</div>
+      </header>
+
+      <main>
+        <div class="intro"><div><span class="eyebrow">ONE SHIP. AN ENTIRE ARMADA.</span><h1>Welcome back, pilot<span>.</span></h1></div><span class="desktop-tag">DESKTOP ARCADE <span>↗</span></span></div>
+        <div class="arcade-layout">
+          <section class="cabinet" id="cabinet" aria-label="Space Attack arcade">
+            <div class="scoreboard">
+              <div><span class="hud-label">1UP SCORE</span><strong id="score">000000</strong></div>
+              <div class="best-score"><span class="hud-label">HI-SCORE</span><strong id="best">000000</strong></div>
+              <div class="wave-score"><span class="hud-label">WAVE</span><strong id="wave">01</strong></div>
+            </div>
+            <div class="viewport" id="viewport">
+              <div id="game-canvas" aria-label="Game playfield"></div>
+              <div class="screen-overlay" id="start-screen">
+                <span class="screen-kicker">THE 1982 CLASSIC • REIGNITED</span>
+                <h2 class="game-title">SPACE<span>ATTACK</span></h2>
+                <p class="screen-subtitle">They’re back. So are you.</p>
+                <button class="primary-button" id="start-button"><span>▶</span> START GAME</button>
+                <span class="key-hint">OR PRESS <kbd>ENTER</kbd></span>
+                <span class="demo-label"><span class="live-dot"></span> ATTRACT MODE</span>
+              </div>
+              <div class="screen-overlay" id="over-screen" hidden>
+                <span class="screen-kicker">MISSION COMPLETE</span><h2 class="over-title">GAME<br />OVER</h2>
+                <span id="new-best" class="new-best" hidden>NEW HIGH SCORE</span>
+                <div class="run-results"><div><span>FINAL SCORE</span><strong id="final-score">000000</strong></div><div><span>BEST SCORE</span><strong id="final-best">000000</strong></div><div><span>WAVE REACHED</span><strong id="final-wave">01</strong></div><div><span>ALIENS DESTROYED</span><strong id="final-kills">0</strong></div></div>
+                <button class="primary-button" id="restart-button"><span>↻</span> PLAY AGAIN</button><span class="key-hint">OR PRESS <kbd>ENTER</kbd></span>
+              </div>
+              <div class="screen-overlay pause-overlay" id="pause-screen" hidden><span class="screen-kicker">TAKE A BREATHER</span><h2>PAUSED</h2><p class="screen-subtitle">Your armada can wait.</p><button class="primary-button" id="resume-button">▶ RESUME</button><span class="key-hint">OR PRESS <kbd>ESC</kbd></span></div>
+              <div class="transition-label" id="transition" hidden></div>
+              <div class="screen-overlay" id="error-screen" hidden><h2>HOUSTON,<br />A PROBLEM.</h2><p id="error-message">The game couldn’t initialize. Enable WebGL and reload to try again.</p><button class="primary-button" onclick="location.reload()">↻ RELOAD</button></div>
+            </div>
+            <div class="ship-status"><div class="fuel-status"><span class="hud-label">FUEL</span><div class="fuel-track"><div id="fuel-fill"></div></div><span id="fuel-value">100%</span></div><div class="ships-status"><span class="hud-label">SHIPS</span><span id="lives" aria-label="3 ships remaining">▲ ▲ ▲</span></div></div>
+            <div class="cabinet-controls"><span id="game-status"><span class="live-dot"></span> READY WHEN YOU ARE</span><div><button class="icon-button" id="sound-button" aria-label="Mute sound" aria-pressed="false" title="Mute sound (M)"><span id="sound-icon">♪</span><span>SOUND</span></button><button class="icon-button" id="effects-button" aria-label="Toggle visual effects" aria-pressed="true" title="Toggle bloom and CRT effects"><span>✧</span><span>FX</span></button><button class="icon-button" id="fullscreen-button" aria-label="Enter fullscreen" title="Fullscreen"><span>⛶</span></button></div></div>
+          </section>
+
+          <aside class="side-panel">
+            <section class="briefing"><span class="panel-number">01 / THE MISSION</span><h2>Hold the line.</h2><p>Break the formation. Dodge the dive. Make every shot count.</p><div class="mission-note"><span>+</span><p>One bonus ship at <strong>5,000 points.</strong></p></div></section>
+            <section class="enemy-guide"><span class="panel-number">02 / KNOW YOUR ENEMY</span><div class="points-head"><span>TARGET</span><span>RANK / DIVE</span></div><div class="enemy-row"><span class="enemy-icon yellow" data-alien="0"></span><div><strong>COMMANDER</strong><span>60 <i>/</i> 200</span></div></div><div class="enemy-row"><span class="enemy-icon red" data-alien="1"></span><div><strong>RAIDER</strong><span>50 <i>/</i> 100</span></div></div><div class="enemy-row"><span class="enemy-icon green" data-alien="2"></span><div><strong>STRIKER</strong><span>40 <i>/</i> 80</span></div></div><div class="enemy-row"><span class="enemy-icon red" data-alien="3"></span><div><strong>SCOUT</strong><span>30 <i>/</i> 60</span></div></div><p class="guide-footnote">Take them down mid-dive for more points.</p></section>
+            <section class="flight-manual"><span class="panel-number">03 / FLIGHT MANUAL</span><div><span><kbd>←</kbd> <kbd>→</kbd></span><span>MOVE</span></div><div><kbd class="space-key">SPACE</kbd><span>FIRE</span></div><div><kbd>ESC</kbd><span>PAUSE</span></div><p>Hold space to keep firing.<br />Watch your fuel. Stay alive.</p></section>
+            <div class="keyboard-notice" id="keyboard-notice" hidden>Keyboard required. Play on a desktop with ← → and space.</div>
+          </aside>
+        </div>
+        <div class="below-game"><span><span class="tiny-cross">✛</span> THREE SHIPS. NO SECOND CHANCES. ONE MORE TRY.</span><span>HIGH SCORES SAVED ON THIS DEVICE</span></div>
+      </main>
+      <footer><span>A love letter to the 8-bit era.</span><span>INSPIRED BY SPACE ATTACK · EMERSON ARCADIA 2001</span><span class="footer-mark">INSERT NOSTALGIA <span>↗</span></span></footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

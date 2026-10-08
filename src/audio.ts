@@ -52,6 +52,14 @@ export class ArcadeAudio {
       case 'hit': this.tone(280, 60, 0.17, 0, 'square', 0.55); break;
       case 'warning': this.tone(330, 330, 0.14, 0, 'square', 0.2); break;
       case 'wave': [262, 330, 392, 524].forEach((pitch, i) => this.tone(pitch, pitch, 0.18, i * 0.13)); break;
+      case 'clear': {
+        const melody = [523, 659, 784, 1047, 784, 1047, 1319];
+        melody.forEach((pitch, i) => this.tone(pitch, pitch, i === 6 ? 0.36 : 0.14, i * 0.13, 'square', 0.35));
+        [131, 165, 196, 262].forEach((pitch, i) => this.tone(pitch, pitch, 0.22, i * 0.26, 'triangle', 0.5));
+        break;
+      }
+      case 'countdown': this.tone(440, 440, 0.09, 0, 'square', 0.3); break;
+      case 'go': this.tone(880, 1320, 0.2, 0, 'square', 0.4); break;
       case 'bonus': [524, 659, 784, 1048].forEach((pitch, i) => this.tone(pitch, pitch, 0.16, i * 0.09)); break;
       case 'explosion': {
         this.tone(110, 20, 0.7, 0, 'sawtooth', 0.65);

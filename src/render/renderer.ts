@@ -4,6 +4,7 @@ import { CRTFilter } from 'pixi-filters/crt';
 import { CONFIG as C } from '../game/config';
 import type { GameEvent, GameModel } from '../game/model';
 import { createTextures, ROW_COLORS } from './sprites';
+import { GameHud, type HudView } from './hud';
 
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: number; size: number };
 type Popup = { label: Text; life: number };
@@ -18,6 +19,8 @@ export class GameRenderer {
   private entities = new Container();
   private alienSprites = new Map<number, Sprite>();
   private player!: Sprite;
+  private hud!: GameHud;
+  private previousPhase = '';
   private textures!: ReturnType<typeof createTextures>;
   private bloom = new AdvancedBloomFilter({ threshold: 0.4, bloomScale: 0.8, brightness: 1, blur: 4, quality: 3 });
   private crt = new CRTFilter({ curvature: 0, lineWidth: 1, lineContrast: 0.12, noise: 0.025, vignetting: 0.22, vignettingAlpha: 0.28, vignettingBlur: 0.45 });
@@ -38,6 +41,8 @@ export class GameRenderer {
     this.player = new Sprite(this.textures.player);
     this.player.anchor.set(0.5); this.player.scale.set(2);
     this.entities.addChild(this.flame, this.player);
+    this.hud = new GameHud(this.textures);
+    this.app.stage.addChild(this.hud);
     this.world.filterArea = new Rectangle(0, 0, C.width, C.height);
     this.setEffects(this.effects);
     matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', event => { this.reducedMotion = event.matches; });
@@ -56,6 +61,17 @@ export class GameRenderer {
   }
 
   event(event: GameEvent) {
+    if (event.kind === 'clear') {
+      for (const [index, x] of [110, 320, 530].entries()) {
+        const count = this.reducedMotion ? 6 : 30;
+        for (let i = 0; i < count; i++) {
+          const angle = i / count * Math.PI * 2;
+          const life = 0.7 + Math.random() * 0.5;
+          const speed = this.reducedMotion ? 25 : 40 + Math.random() * 75;
+          this.particles.push({ x, y: 240 - index % 2 * 70, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life, maxLife: life, color: [0xf7eb7b, 0x7bfbe0, 0xff667c][index], size: 2 });
+        }
+      }
+    }
     if (event.kind === 'hit' || event.kind === 'explosion') {
       const count = this.reducedMotion ? 6 : this.effects ? (event.kind === 'hit' ? 22 : 65) : 10;
       const color = event.kind === 'hit' ? ROW_COLORS[event.row ?? 0] : 0x7bfbe0;
@@ -77,7 +93,9 @@ export class GameRenderer {
     this.world.addChild(label); this.popups.push({ label, life: 0.8 });
   }
 
-  draw(game: GameModel, dt: number) {
+  draw(game: GameModel, dt: number, view: HudView) {
+    if (game.phase === 'intermission' && this.previousPhase !== 'intermission') this.clear();
+    this.previousPhase = game.phase;
     this.visualTime += dt;
     this.crt.time = this.reducedMotion ? 0 : this.visualTime;
     this.crt.seed = this.reducedMotion ? 0 : Math.floor(this.visualTime * 6) / 6;
@@ -101,7 +119,7 @@ export class GameRenderer {
       sprite.position.set(Math.round(alien.x), Math.round(alien.y));
     }
     this.player.position.set(Math.round(game.player.x), game.player.y);
-    this.player.visible = game.phase !== 'dying' && game.phase !== 'gameover' && (game.player.invulnerability <= 0 || Math.floor(game.elapsed * 10) % 2 === 0);
+    this.player.visible = !['dying', 'gameover', 'intermission'].includes(game.phase) && (game.player.invulnerability <= 0 || Math.floor(game.elapsed * 10) % 2 === 0);
     this.flame.clear();
     if (this.player.visible) {
       this.flame.rect(game.player.x - 2, game.player.y + 10, 4, 3 + Math.floor(game.elapsed * 20) % 4).fill({ color: 0x7bfbe0, alpha: 0.6 });
@@ -129,6 +147,7 @@ export class GameRenderer {
     this.shake = Math.max(0, this.shake - dt);
     const strength = this.shake * 14;
     this.world.position.set(!this.reducedMotion && this.effects ? Math.sin(this.visualTime * 80) * strength : 0, !this.reducedMotion && this.effects ? Math.cos(this.visualTime * 70) * strength : 0);
+    this.hud.draw(game, view);
     this.app.render();
   }
 }

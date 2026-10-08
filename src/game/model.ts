@@ -1,6 +1,6 @@
 import { CONFIG as C, difficulty } from './config';
 
-export type Phase = 'intro' | 'playing' | 'dying' | 'gameover';
+export type Phase = 'celebrating' | 'intermission' | 'assembling' | 'countdown' | 'launching' | 'playing' | 'dying' | 'gameover';
 export type Controls = { left: boolean; right: boolean; fire: boolean };
 export const NO_INPUT: Controls = { left: false, right: false, fire: false };
 export type Alien = {
@@ -9,11 +9,11 @@ export type Alien = {
   startX: number; startY: number; targetX: number; direction: number;
 };
 export type Missile = { id: number; x: number; y: number; vx: number; vy: number };
-export type GameEvent = { kind: 'shot' | 'attack' | 'hit' | 'explosion' | 'wave' | 'warning' | 'bonus'; x: number; y: number; row?: number; points?: number };
+export type GameEvent = { kind: 'shot' | 'attack' | 'hit' | 'explosion' | 'wave' | 'clear' | 'countdown' | 'go' | 'warning' | 'bonus'; x: number; y: number; row?: number; points?: number; count?: number };
 
 /** Pure simulation: no browser, audio, rendering or storage dependencies. */
 export class GameModel {
-  phase: Phase = 'intro';
+  phase: Phase = 'assembling';
   paused = false;
   score = 0;
   lives: number = C.startingLives;
@@ -26,7 +26,7 @@ export class GameModel {
   missile: Missile | null = null;
   enemyMissiles: Missile[] = [];
   private events: GameEvent[] = [];
-  private timer: number = C.transitionSeconds;
+  private timer: number = C.assemblySeconds;
   private diveTimer = 1;
   private shotTimer = 1.5;
   private warningTimer = 0;
@@ -47,8 +47,8 @@ export class GameModel {
   private createWave() {
     this.aliens = C.rowCounts.flatMap((count, row) => Array.from({ length: count }, (_, col) => {
       const x = 320 + (col - (count - 1) / 2) * 43;
-      const y = 66 + row * 29;
-      return { id: this.nextId++, row, homeX: x, homeY: y, x, y, mode: 'formation' as const,
+      const y = 80 + row * 29;
+      return { id: this.nextId++, row, homeX: x, homeY: y, x, y: -32 - row * 22, mode: 'formation' as const,
         progress: 0, startX: x, startY: y, targetX: x, direction: 1 };
     }));
     this.fuel = C.fuelSeconds;
@@ -57,8 +57,8 @@ export class GameModel {
     this.diveTimer = 1;
     this.shotTimer = 1.5;
     this.warningTimer = 0;
-    this.phase = 'intro';
-    this.timer = C.transitionSeconds;
+    this.phase = 'assembling';
+    this.timer = C.assemblySeconds;
     this.events.push({ kind: 'wave', x: 320, y: 240 });
   }
 
@@ -66,24 +66,50 @@ export class GameModel {
     return this.events.splice(0);
   }
 
+  get countdown() { return this.phase === 'countdown' ? Math.max(1, Math.ceil(this.timer - 1e-9)) : 0; }
+  get assemblyProgress() { return this.phase === 'assembling' ? 1 - this.timer / C.assemblySeconds : 1; }
+
+  private updateTransition(dt: number) {
+    const oldCount = this.countdown;
+    this.timer -= dt;
+    if (this.phase === 'assembling') {
+      const elapsed = C.assemblySeconds - Math.max(0, this.timer);
+      for (const alien of this.aliens) {
+        const t = Math.max(0, Math.min(1, (elapsed - alien.row * 0.13) / (C.assemblySeconds - 0.65)));
+        const ease = 1 - (1 - t) ** 3;
+        alien.x = this.formationX(alien) + Math.sin(t * Math.PI) * (alien.row % 2 ? 55 : -55);
+        alien.y = -32 + (alien.homeY + 32) * ease;
+      }
+    } else if (this.phase === 'countdown' || this.phase === 'launching' || this.phase === 'dying') this.updateFormation();
+
+    if (this.timer > 1e-9) {
+      if (this.phase === 'countdown' && oldCount !== this.countdown) this.events.push({ kind: 'countdown', count: this.countdown, x: 320, y: 320 });
+      return;
+    }
+    switch (this.phase) {
+      case 'celebrating': this.phase = 'intermission'; this.timer = C.intermissionSeconds; break;
+      case 'intermission': this.wave++; this.createWave(); break;
+      case 'assembling':
+        this.updateFormation(); this.phase = 'countdown'; this.timer = C.countdownSeconds;
+        this.events.push({ kind: 'countdown', count: 3, x: 320, y: 320 }); break;
+      case 'countdown':
+        this.phase = 'launching'; this.timer = C.launchSeconds;
+        this.events.push({ kind: 'go', x: 320, y: 320 }); break;
+      case 'launching': this.phase = 'playing'; break;
+      case 'dying':
+        if (this.lives === 0) { this.phase = 'gameover'; break; }
+        this.player.x = C.width / 2;
+        this.player.invulnerability = C.invulnerabilitySeconds;
+        this.fuel = C.fuelSeconds;
+        this.warningTimer = 0;
+        this.phase = 'playing'; break;
+    }
+  }
+
   step(dt: number, input: Controls = NO_INPUT) {
     if (this.paused || this.phase === 'gameover') return;
     this.elapsed += dt;
-    if (this.phase === 'intro' || this.phase === 'dying') {
-      this.timer -= dt;
-      this.updateFormation();
-      if (this.timer <= 0) {
-        if (this.phase === 'dying' && this.lives === 0) { this.phase = 'gameover'; return; }
-        if (this.phase === 'dying') {
-          this.player.x = C.width / 2;
-          this.player.invulnerability = C.invulnerabilitySeconds;
-          this.fuel = C.fuelSeconds;
-          this.warningTimer = 0;
-        }
-        this.phase = 'playing';
-      }
-      return;
-    }
+    if (this.phase !== 'playing') { this.updateTransition(dt); return; }
 
     this.player.invulnerability = Math.max(0, this.player.invulnerability - dt);
     const direction = Number(input.right) - Number(input.left);
@@ -148,7 +174,13 @@ export class GameModel {
       const alienHit = this.aliens.some(a => Math.abs(a.x - this.player.x) < 23 && Math.abs(a.y - this.player.y) < 17);
       if (missileHit || alienHit) { this.loseShip(); return; }
     }
-    if (!this.aliens.length) { this.wave++; this.createWave(); }
+    if (!this.aliens.length) {
+      this.phase = 'celebrating';
+      this.timer = C.celebrationSeconds;
+      this.missile = null;
+      this.enemyMissiles = [];
+      this.events.push({ kind: 'clear', x: 320, y: 245 });
+    }
   }
 
   private formationX(alien: Alien) { return alien.homeX + Math.sin(this.elapsed * 0.85) * 26; }

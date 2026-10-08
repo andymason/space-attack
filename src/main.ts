@@ -5,7 +5,7 @@ import { demoControls } from './game/demo';
 import { Keyboard } from './input';
 import { ArcadeAudio } from './audio';
 import { GameRenderer } from './render/renderer';
-import { alienSvg } from './render/sprites';
+import { BUTTONS, type Screen } from './render/hud';
 import { loadPreferences, savePreferences } from './storage';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -16,55 +16,73 @@ const renderer = new GameRenderer();
 renderer.effects = preferences.effects;
 const clock = new FixedStepClock();
 let game = new GameModel();
-let screen: 'start' | 'play' | 'over' = 'start';
+let screen: Screen = 'start';
 let ready = false;
 let runBest = preferences.best;
 let previous = 0;
-const scoreText = (score: number) => String(score).padStart(6, '0');
-
+let lastAccessibleUpdate = 0;
+let lastAnnouncement = '';
+const keyboardRequired = matchMedia('(pointer: coarse)').matches;
 const ui = {
-  score: element('score'), best: element('best'), wave: element('wave'), fuel: element('fuel-fill'), fuelValue: element('fuel-value'), lives: element('lives'),
-  start: element('start-screen'), over: element('over-screen'), paused: element('pause-screen'), transition: element('transition'),
-  startButton: element<HTMLButtonElement>('start-button'), restartButton: element<HTMLButtonElement>('restart-button'),
-  status: element('game-status'), sound: element('sound-button'), soundIcon: element('sound-icon'), effects: element('effects-button'),
+  start: element<HTMLButtonElement>('start-button'),
+  restart: element<HTMLButtonElement>('restart-button'),
+  resume: element<HTMLButtonElement>('resume-button'),
+  sound: element<HTMLButtonElement>('sound-button'),
+  effects: element<HTMLButtonElement>('effects-button'),
+  fullscreen: element<HTMLButtonElement>('fullscreen-button'),
+  canvas: element('game-canvas'),
+  announcement: element('game-announcement'),
 };
-ui.startButton.disabled = true;
-document.querySelectorAll<HTMLElement>('[data-alien]').forEach(target => { target.innerHTML = alienSvg(Number(target.dataset.alien)); });
-element('keyboard-notice').hidden = !matchMedia('(pointer: coarse)').matches;
+for (const [name, rect] of Object.entries(BUTTONS)) {
+  const button = ui[name as keyof typeof BUTTONS];
+  button.style.left = rect.x / CONFIG.width * 100 + '%';
+  button.style.top = rect.y / CONFIG.height * 100 + '%';
+  button.style.width = rect.width / CONFIG.width * 100 + '%';
+  button.style.height = rect.height / CONFIG.height * 100 + '%';
+  button.disabled = true;
+}
 
-function updatePreferences() {
+function syncControls() {
+  ui.start.hidden = screen !== 'start';
+  ui.restart.hidden = screen !== 'over';
+  ui.resume.hidden = screen !== 'play' || !game.paused;
   ui.sound.setAttribute('aria-pressed', String(!preferences.sound));
   ui.sound.setAttribute('aria-label', preferences.sound ? 'Mute sound' : 'Enable sound');
-  ui.sound.title = `${preferences.sound ? 'Mute' : 'Enable'} sound (M)`;
-  ui.soundIcon.textContent = preferences.sound ? '♪' : '∅';
   ui.effects.setAttribute('aria-pressed', String(preferences.effects));
-  savePreferences(preferences);
+  ui.fullscreen.setAttribute('aria-label', document.fullscreenElement ? 'Exit fullscreen' : 'Enter fullscreen');
 }
+
 function toggleSound() {
   preferences.sound = !preferences.sound;
   audio.enabled = preferences.sound;
   if (preferences.sound) void audio.unlock(); else audio.hush();
-  updatePreferences();
+  savePreferences(preferences);
+  syncControls();
 }
-function blurButton() { if (document.activeElement instanceof HTMLButtonElement) document.activeElement.blur(); }
+
+function focusGame() { ui.canvas.focus({ preventScroll: true }); }
+
 function start() {
   if (!ready) return;
-  void audio.unlock(); audio.hush();
-  screen = 'play'; game = new GameModel(Math.floor(Math.random() * 0xffffffff));
+  audio.hush();
+  screen = 'play';
+  game = new GameModel(Math.floor(Math.random() * 0xffffffff));
+  const startingGame = game;
   runBest = preferences.best;
   clock.clear(); keyboard.clear(); renderer.clear();
-  ui.start.hidden = true; ui.over.hidden = true; ui.paused.hidden = true;
-  blurButton();
-  for (const event of game.takeEvents()) { renderer.event(event); audio.play(event); }
-  updateHud();
+  game.takeEvents();
+  void audio.unlock().then(() => {
+    if (game === startingGame && screen === 'play' && !game.paused) audio.play({ kind: 'wave', x: 320, y: 240 });
+  });
+  focusGame(); syncControls(); accessibleState();
 }
+
 function pause(paused: boolean) {
   if (screen !== 'play') return;
   game.paused = paused;
   keyboard.clear(); clock.clear(); audio.hush();
-  ui.paused.hidden = !paused;
-  if (!paused) { void audio.unlock(); blurButton(); }
-  updateHud();
+  if (!paused) { void audio.unlock(); focusGame(); }
+  syncControls(); accessibleState();
 }
 
 const keyboard = new Keyboard(key => {
@@ -73,48 +91,48 @@ const keyboard = new Keyboard(key => {
   if (key === 'Escape' && screen === 'play') pause(!game.paused);
 }, () => { if (screen === 'play' && !game.paused) pause(true); });
 
-ui.startButton.addEventListener('click', start);
-ui.restartButton.addEventListener('click', start);
-element('resume-button').addEventListener('click', () => pause(false));
-ui.sound.addEventListener('click', () => { toggleSound(); blurButton(); });
-ui.effects.addEventListener('click', () => { preferences.effects = !preferences.effects; renderer.setEffects(preferences.effects); updatePreferences(); blurButton(); });
-element('fullscreen-button').addEventListener('click', async () => {
-  const target = element('cabinet');
-  try { if (document.fullscreenElement) await document.exitFullscreen(); else await target.requestFullscreen(); }
-  catch { element('fullscreen-button').title = 'Fullscreen is unavailable in this browser'; }
-  blurButton();
+ui.start.addEventListener('click', start);
+ui.restart.addEventListener('click', start);
+ui.resume.addEventListener('click', () => pause(false));
+ui.sound.addEventListener('click', () => { toggleSound(); focusGame(); });
+ui.effects.addEventListener('click', () => {
+  preferences.effects = !preferences.effects;
+  renderer.setEffects(preferences.effects);
+  savePreferences(preferences);
+  focusGame(); syncControls();
 });
-document.addEventListener('fullscreenchange', () => element('fullscreen-button').setAttribute('aria-label', document.fullscreenElement ? 'Exit fullscreen' : 'Enter fullscreen'));
+ui.fullscreen.addEventListener('click', async () => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await element('cabinet').requestFullscreen();
+  } catch { ui.fullscreen.title = 'Fullscreen is unavailable in this browser'; }
+  focusGame(); syncControls();
+});
+document.addEventListener('fullscreenchange', syncControls);
 
-function updateHud() {
+function accessibleState() {
   const demo = screen === 'start';
-  ui.score.textContent = scoreText(demo ? 0 : game.score);
-  ui.best.textContent = scoreText(Math.max(preferences.best, demo ? 0 : game.score));
-  ui.wave.textContent = String(demo ? 1 : game.wave).padStart(2, '0');
-  const fuel = demo ? 100 : Math.ceil(game.fuel / CONFIG.fuelSeconds * 100);
-  ui.fuel.style.width = `${fuel}%`;
-  ui.fuelValue.textContent = `${fuel}%`;
-  element('cabinet').classList.toggle('low-fuel', !demo && game.fuel <= CONFIG.fuelSeconds * CONFIG.warningThreshold);
-  const lives = demo ? CONFIG.startingLives : game.lives;
-  ui.lives.textContent = '▲ '.repeat(lives).trim() || '—';
-  ui.lives.setAttribute('aria-label', `${lives} ships remaining`);
-  ui.transition.hidden = screen !== 'play' || game.phase !== 'intro' || game.paused;
-  ui.transition.textContent = `WAVE ${String(game.wave).padStart(2, '0')} · GET READY`;
-  const status = screen === 'start' ? 'READY WHEN YOU ARE' : screen === 'over' ? 'ONE MORE TRY?' : game.paused ? 'FLIGHT PAUSED' : game.phase === 'dying' ? (game.lives ? 'SHIP LOST · REDEPLOYING' : 'SIGNAL LOST') : 'MISSION IN PROGRESS';
-  ui.status.innerHTML = `<span class="live-dot"></span>${status}`;
+  const phase = game.paused ? 'paused' : game.phase;
+  ui.canvas.dataset.screen = screen;
+  ui.canvas.dataset.phase = phase;
+  ui.canvas.dataset.countdown = String(game.countdown);
+  ui.canvas.setAttribute('aria-label', demo ? 'Space Attack attract mode' :
+    'Space Attack. Score ' + game.score + '. Best ' + Math.max(preferences.best, game.score) +
+    '. Wave ' + game.wave + '. Ships ' + game.lives + '. Fuel ' + Math.ceil(game.fuel / CONFIG.fuelSeconds * 100) +
+    ' percent. ' + phase + '.');
+  const message = demo ? 'Press Enter to start.' : screen === 'over' ? 'Game over. Score ' + game.score + '. Enter to restart.' :
+    game.paused ? 'Paused. Escape to resume.' : game.phase === 'celebrating' ? 'Wave ' + game.wave + ' cleared!' :
+    game.phase === 'countdown' ? 'Wave ' + game.wave + '. ' + game.countdown :
+    game.phase === 'launching' ? 'Go!' : game.phase === 'assembling' ? 'Wave ' + game.wave + ' incoming.' :
+    game.phase === 'dying' ? 'Ship lost.' : game.phase === 'playing' ? 'Playing.' : '';
+  if (message !== lastAnnouncement) { ui.announcement.textContent = message; lastAnnouncement = message; }
 }
 
 function finish() {
   screen = 'over'; audio.hush(); keyboard.clear();
   preferences.best = Math.max(preferences.best, game.score);
   savePreferences(preferences);
-  element('final-score').textContent = scoreText(game.score);
-  element('final-best').textContent = scoreText(preferences.best);
-  element('final-wave').textContent = String(game.wave).padStart(2, '0');
-  element('final-kills').textContent = String(game.kills);
-  element('new-best').hidden = game.score <= runBest;
-  ui.over.hidden = false; ui.paused.hidden = true; ui.transition.hidden = true;
-  updateHud();
+  syncControls(); accessibleState();
 }
 
 function frame(time: number) {
@@ -132,23 +150,28 @@ function frame(time: number) {
       if (screen === 'play' && !game.paused) audio.play(event);
     }
     if (screen === 'play' && game.phase === 'gameover') finish();
-    renderer.draw(game, game.paused ? 0 : delta);
-    updateHud();
+    renderer.draw(game, game.paused ? 0 : delta, {
+      screen, best: preferences.best, newBest: game.score > runBest,
+      sound: preferences.sound, effects: preferences.effects,
+      fullscreen: !!document.fullscreenElement, keyboardRequired,
+    });
+    if (time - lastAccessibleUpdate > 100) { accessibleState(); lastAccessibleUpdate = time; }
   }
   requestAnimationFrame(frame);
 }
 
 async function init() {
   try {
-    await renderer.init(element('game-canvas'));
+    await document.fonts.load('10px "Press Start 2P"');
+    await renderer.init(ui.canvas);
     ready = true;
-    ui.startButton.disabled = false;
+    for (const name of Object.keys(BUTTONS)) ui[name as keyof typeof BUTTONS].disabled = false;
     game.takeEvents();
-    updatePreferences(); updateHud();
+    syncControls(); accessibleState();
     requestAnimationFrame(frame);
   } catch (error) {
     console.error('Space Attack could not initialize:', error);
-    ui.start.hidden = true;
+    for (const name of Object.keys(BUTTONS)) ui[name as keyof typeof BUTTONS].hidden = true;
     element('error-screen').hidden = false;
   }
 }
